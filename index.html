@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema de Almoxarifado 2.0</title>
+
+<!-- ============================================================================
+     BIBLIOTECAS EXTERNAS (via CDN)
+     - SheetJS (xlsx): importação/exportação de planilhas Excel/CSV
+     - QRCode.js: geração de QR Code por item
+     - JsBarcode: geração de código de barras por item
+     ============================================================================ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/JsBarcode/3.11.5/JsBarcode.all.min.js"></script>
+
+<!-- Estilos do sistema (separados em arquivos próprios) -->
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/login.css">
+</head>
+<body>
+
+<!-- ============================================================================
+     TELA DE LOGIN
+     Fica visível por padrão e é ocultada pelo js/auth.js assim que o
+     Firebase confirmar que há um usuário autenticado.
+     ============================================================================ -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="brand-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>
+      </div>
+      <div>
+        <h1>Sistema de Almoxarifado</h1>
+        <span>ERP INDUSTRIAL &middot; v2.0</span>
+      </div>
+    </div>
+
+    <div class="login-config-warning" id="loginConfigWarning">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9L2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+      <span>O Firebase ainda não foi configurado. Edite <b>js/firebase-config.js</b> com as credenciais do seu projeto para habilitar o login.</span>
+    </div>
+
+    <h2 class="login-title" id="loginTitle">Bem-vindo de volta</h2>
+    <p class="login-sub" id="loginSub">Entre com seu e-mail e senha para acessar o almoxarifado.</p>
+
+    <div class="login-tabs">
+      <button type="button" class="login-tab active" id="tabEntrar">Entrar</button>
+      <button type="button" class="login-tab" id="tabCriar">Criar conta</button>
+    </div>
+
+    <div class="login-alert" id="loginAlert"></div>
+
+    <!-- Formulário: ENTRAR -->
+    <form class="login-form" id="formEntrar" autocomplete="on">
+      <div class="login-field">
+        <label for="loginEmail">E-mail</label>
+        <input type="email" id="loginEmail" autocomplete="username" placeholder="voce@empresa.com" required>
+      </div>
+      <div class="login-field">
+        <label for="loginSenha">Senha</label>
+        <div class="pw-row">
+          <input type="password" id="loginSenha" autocomplete="current-password" placeholder="Sua senha" required>
+          <button type="button" class="login-toggle-pw" data-target="loginSenha" title="Mostrar/ocultar senha">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="login-row-between">
+        <span></span>
+        <button type="button" class="login-forgot" id="btnEsqueciSenha">Esqueci minha senha</button>
+      </div>
+      <button type="submit" class="login-btn" id="btnEntrar">
+        <span class="spinner"></span><span class="btn-txt">Entrar</span>
+      </button>
+    </form>
+
+    <!-- Formulário: CRIAR CONTA -->
+    <form class="login-form hidden" id="formCriar" autocomplete="on">
+      <div class="login-field">
+        <label for="criarNome">Nome</label>
+        <input type="text" id="criarNome" autocomplete="name" placeholder="Seu nome completo" required>
+      </div>
+      <div class="login-field">
+        <label for="criarEmail">E-mail</label>
+        <input type="email" id="criarEmail" autocomplete="username" placeholder="voce@empresa.com" required>
+      </div>
+      <div class="login-field">
+        <label for="criarSenha">Senha</label>
+        <div class="pw-row">
+          <input type="password" id="criarSenha" autocomplete="new-password" placeholder="Mínimo de 6 caracteres" required>
+          <button type="button" class="login-toggle-pw" data-target="criarSenha" title="Mostrar/ocultar senha">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="login-field">
+        <label for="criarSenha2">Confirmar senha</label>
+        <input type="password" id="criarSenha2" autocomplete="new-password" placeholder="Repita a senha" required>
+      </div>
+      <button type="submit" class="login-btn" id="btnCriar">
+        <span class="spinner"></span><span class="btn-txt">Criar conta</span>
+      </button>
+    </form>
+
+    <p class="login-footnote">Autenticação via Firebase &middot; seus dados de acesso não são compartilhados com terceiros.</p>
+  </div>
+</div>
+
+<!-- ============================================================================
+     CONTEÚDO DO SISTEMA
+     Fica oculto (display:none) até o login ser confirmado por js/auth.js.
+     ============================================================================ -->
+<div id="appRoot" style="display:none">
+
+<!-- ============================================================================
+     CABEÇALHO
+     ============================================================================ -->
+<header class="app-header">
+  <div class="header-inner">
+    <div class="brand">
+      <div class="brand-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>Sistema de Almoxarifado</h1>
+        <span>ERP INDUSTRIAL &middot; v2.0</span>
+      </div>
+    </div>
+
+    <div class="header-stats">
+      <div class="server-pill">
+        <span class="dot online" id="serverDot"></span>
+        <span id="serverLabel">Online</span>
+        <span style="color:var(--text-faint); font-weight:400;" id="serverPing">&middot; 24ms</span>
+      </div>
+      <div class="hstat">
+        <span class="lbl">Itens cadastrados</span>
+        <span class="val" id="hstatItens">0</span>
+      </div>
+      <div class="hstat">
+        <span class="lbl">Última sincronização</span>
+        <span class="val" id="hstatSync">--:--:--</span>
+      </div>
+      <div class="user-chip">
+        <div class="user-avatar" id="userAvatar">A</div>
+        <div>
+          <div class="u-name" id="userName">Administrador</div>
+          <div class="u-clock" id="userClock">--/--/---- --:--:--</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ==========================================================================
+       DASHBOARD
+       ========================================================================== -->
+  <section class="dash-grid">
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Itens cadastrados</span>
+        <div class="kpi-icon i-total"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+      </div>
+      <div class="kpi-value" id="kpiTotal">0</div>
+      <div class="kpi-sub" id="kpiTotalSub">0 categorias</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Estoque baixo</span>
+        <div class="kpi-icon i-low"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9L2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></div>
+      </div>
+      <div class="kpi-value" id="kpiBaixo">0</div>
+      <div class="kpi-sub">Abaixo da quantidade mínima</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Sem estoque</span>
+        <div class="kpi-icon i-out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg></div>
+      </div>
+      <div class="kpi-value" id="kpiZerado">0</div>
+      <div class="kpi-sub">Itens com quantidade zero</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Valor total do estoque</span>
+        <div class="kpi-icon i-value"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+      </div>
+      <div class="kpi-value" id="kpiValor">R$ 0,00</div>
+      <div class="kpi-sub">Soma (quantidade × valor unitário)</div>
+    </div>
+  </section>
+
+  <section class="charts-grid">
+    <div class="chart-card">
+      <h3>Situação do estoque</h3>
+      <p class="chart-sub">Distribuição por status</p>
+      <div class="donut-wrap" id="donutWrap"></div>
+    </div>
+    <div class="chart-card">
+      <h3>Itens por categoria</h3>
+      <p class="chart-sub">Quantidade total em estoque</p>
+      <div id="barChart"></div>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       BARRA DE PESQUISA + AÇÕES
+       ========================================================================== -->
+  <section class="toolbar-section">
+    <div class="search-row">
+      <div class="search-box">
+        <svg class="icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input type="text" id="searchInput" placeholder="Buscar por código, descrição, categoria, prateleira, box, código de barras ou QR Code...">
+        <button type="button" class="clear-btn" id="clearBtn" hidden title="Limpar pesquisa">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <span class="result-count" id="resultCount"></span>
+    </div>
+
+    <div class="action-bar">
+      <button type="button" class="btn btn-primary" id="btnNovoItem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg> Adicionar Item
+      </button>
+      <button type="button" class="btn" id="btnImportar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg> Importar Excel
+      </button>
+      <button type="button" class="btn" id="btnExportar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M4 3h16"/></svg> Exportar
+      </button>
+      <button type="button" class="btn" id="btnRelatorio">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6l4 4v14H5V3z"/><path d="M9 12h6M9 16h6M9 8h2"/></svg> Gerar Relatório
+      </button>
+      <button type="button" class="btn btn-warn" id="btnPedidoCompra">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2 3h3l2.6 12.5a2 2 0 0 0 2 1.5h8.8a2 2 0 0 0 2-1.6L22 8H6"/></svg> Pedido de Compra
+      </button>
+      <button type="button" class="btn" id="btnHistorico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg> Histórico
+      </button>
+      <button type="button" class="btn" id="btnBackup">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v3"/><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 12v5"/><path d="M9.5 14.5L12 17l2.5-2.5"/></svg> Backup
+      </button>
+      <button type="button" class="btn" id="btnRestaurar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg> Restaurar Backup
+      </button>
+      <button type="button" class="btn" id="btnConfig">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg> Configurações
+      </button>
+      <input type="file" id="fileImportar" accept=".xlsx,.xls,.csv" hidden>
+      <input type="file" id="fileRestaurar" accept=".json" hidden>
+    </div>
+  </section>
+
+  <!-- ==========================================================================
+       GRID DE ITENS
+       ========================================================================== -->
+  <section class="results-grid" id="results"></section>
+
+  <footer class="app-footer">
+    Sistema de Almoxarifado 2.0 &middot; Dados mantidos em memória nesta sessão &mdash; use <b>Backup</b> para salvar e <b>Restaurar Backup</b> para recuperar seus dados. Pronto para futura integração com Node.js + Express + PostgreSQL via API REST.
+  </footer>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+
+</div><!-- /#appRoot -->
+
+<!-- ============================================================================
+     FIREBASE (SDK compat) + SCRIPTS DO SISTEMA
+     ============================================================================ -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
+<script src="js/firebase-config.js"></script>
+<script src="js/app.js"></script>
+<script src="js/auth.js"></script>
+
+</body>
+</html>
