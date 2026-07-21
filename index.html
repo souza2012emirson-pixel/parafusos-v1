@@ -5,27 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sistema de Almoxarifado 2.0</title>
 
-<!-- ============================================================================
-     BIBLIOTECAS EXTERNAS (via CDN)
-     - SheetJS (xlsx): importação/exportação de planilhas Excel/CSV
-     - QRCode.js: geração de QR Code por item
-     - JsBarcode: geração de código de barras por item
-     ============================================================================ -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/JsBarcode/3.11.5/JsBarcode.all.min.js"></script>
 
-<!-- Estilos do sistema (separados em arquivos próprios) -->
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="login.css">
 </head>
 <body>
 
-<!-- ============================================================================
-     TELA DE LOGIN
-     Fica visível por padrão e é ocultada pelo auth.js assim que o
-     Firebase confirmar que há um usuário autenticado.
-     ============================================================================ -->
 <div class="login-screen" id="loginScreen">
   <div class="login-card">
     <div class="login-brand">
@@ -49,15 +37,16 @@
     <div class="login-tabs">
       <button type="button" class="login-tab active" id="tabEntrar">Entrar</button>
       <button type="button" class="login-tab" id="tabCriar">Criar conta</button>
+      <button type="button" class="login-tab" id="tabRecuperar">Recuperar</button>
     </div>
 
     <div class="login-alert" id="loginAlert"></div>
 
-    <!-- Formulário: ENTRAR -->
+    <!-- ENTRAR -->
     <form class="login-form" id="formEntrar" autocomplete="on">
       <div class="login-field">
-        <label for="loginEmail">E-mail</label>
-        <input type="email" id="loginEmail" autocomplete="username" placeholder="voce@empresa.com" required>
+        <label for="loginEmail">E-mail ou Crachá</label>
+        <input type="text" id="loginEmail" autocomplete="username" placeholder="voce@empresa.com ou nº do crachá" required>
       </div>
       <div class="login-field">
         <label for="loginSenha">Senha</label>
@@ -77,15 +66,19 @@
       </button>
     </form>
 
-    <!-- Formulário: CRIAR CONTA -->
+    <!-- CRIAR CONTA -->
     <form class="login-form hidden" id="formCriar" autocomplete="on">
       <div class="login-field">
         <label for="criarNome">Nome</label>
         <input type="text" id="criarNome" autocomplete="name" placeholder="Seu nome completo" required>
       </div>
       <div class="login-field">
-        <label for="criarEmail">E-mail</label>
-        <input type="email" id="criarEmail" autocomplete="username" placeholder="voce@empresa.com" required>
+        <label for="criarCracha">Crachá</label>
+        <input type="text" id="criarCracha" autocomplete="off" placeholder="Número do seu crachá" required>
+      </div>
+      <div class="login-field">
+        <label for="criarEmail">E-mail (opcional)</label>
+        <input type="email" id="criarEmail" autocomplete="username" placeholder="Deixe em branco se não tiver">
       </div>
       <div class="login-field">
         <label for="criarSenha">Senha</label>
@@ -105,19 +98,37 @@
       </button>
     </form>
 
+    <!-- RECUPERAR -->
+    <form class="login-form hidden" id="formRecuperarEmail" autocomplete="on">
+      <div class="login-field">
+        <label for="recEmail">Recuperar por e-mail</label>
+        <input type="email" id="recEmail" placeholder="voce@empresa.com" required>
+      </div>
+      <button type="submit" class="login-btn" id="btnRecuperarEmail">
+        <span class="spinner"></span><span class="btn-txt">Enviar link por e-mail</span>
+      </button>
+      <p class="login-footnote" style="margin:18px 0;">— ou, se sua conta não tem e-mail cadastrado —</p>
+    </form>
+    <form class="login-form hidden" id="formRecuperarCracha" autocomplete="off">
+      <div class="login-field">
+        <label for="recCracha">Recuperar por crachá</label>
+        <input type="text" id="recCracha" placeholder="Número do crachá" required>
+      </div>
+      <div class="login-field">
+        <label for="recCodigo">Código de recuperação</label>
+        <input type="text" id="recCodigo" placeholder="XXXX-XXXX-XXXX" required>
+      </div>
+      <button type="submit" class="login-btn" id="btnRecuperarCracha">
+        <span class="spinner"></span><span class="btn-txt">Verificar e solicitar redefinição</span>
+      </button>
+    </form>
+
     <p class="login-footnote">Autenticação via Firebase &middot; seus dados de acesso não são compartilhados com terceiros.</p>
   </div>
 </div>
 
-<!-- ============================================================================
-     CONTEÚDO DO SISTEMA
-     Fica oculto (display:none) até o login ser confirmado por auth.js.
-     ============================================================================ -->
 <div id="appRoot" style="display:none">
 
-<!-- ============================================================================
-     CABEÇALHO
-     ============================================================================ -->
 <header class="app-header">
   <div class="header-inner">
     <div class="brand">
@@ -157,9 +168,6 @@
 
 <div class="wrap">
 
-  <!-- ==========================================================================
-       DASHBOARD
-       ========================================================================== -->
   <section class="dash-grid">
     <div class="kpi-card">
       <div class="kpi-top">
@@ -208,9 +216,6 @@
     </div>
   </section>
 
-  <!-- ==========================================================================
-       BARRA DE PESQUISA + AÇÕES
-       ========================================================================== -->
   <section class="toolbar-section">
     <div class="search-row">
       <div class="search-box">
@@ -248,6 +253,12 @@
       <button type="button" class="btn" id="btnRestaurar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg> Restaurar Backup
       </button>
+      <button type="button" class="btn" id="btnUsuarios">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Usuários
+      </button>
+      <button type="button" class="btn" id="btnAcessos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Acessos
+      </button>
       <button type="button" class="btn" id="btnConfig">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg> Configurações
       </button>
@@ -256,13 +267,10 @@
     </div>
   </section>
 
-  <!-- ==========================================================================
-       GRID DE ITENS
-       ========================================================================== -->
   <section class="results-grid" id="results"></section>
 
   <footer class="app-footer">
-    Sistema de Almoxarifado 2.0 &middot; Dados mantidos em memória nesta sessão &mdash; use <b>Backup</b> para salvar e <b>Restaurar Backup</b> para recuperar seus dados. Pronto para futura integração com Node.js + Express + PostgreSQL via API REST.
+    Sistema de Almoxarifado 2.0 &middot; Sincronizado com Firebase (Firestore) em tempo real.
   </footer>
 </div>
 
@@ -271,11 +279,9 @@
 
 </div><!-- /#appRoot -->
 
-<!-- ============================================================================
-     FIREBASE (SDK compat) + SCRIPTS DO SISTEMA
-     ============================================================================ -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
 <script src="firebase-config.js"></script>
 <script src="app.js"></script>
